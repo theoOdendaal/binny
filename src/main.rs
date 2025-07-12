@@ -1,3 +1,4 @@
+use chrono::Days;
 use ndarray::Array1;
 use serde::de::value;
 use std::collections::{self, HashMap, VecDeque};
@@ -91,6 +92,34 @@ fn read_symbols_from_file(path: &str) -> std::io::Result<Vec<String>> {
     Ok(symbols)
 }
 
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let base_url = "https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1h";
+    let start_date = chrono::NaiveDate::from_ymd_opt(2022, 1, 1).unwrap();
+    let end_date = chrono::NaiveDate::from_ymd_opt(2022, 1, 31).unwrap();
+
+    let client = reqwest::blocking::Client::new();
+
+    let mut date = start_date;
+    while date <= end_date {
+        let filename = format!("BTCUSDT-1h-{}.zip", date.format("%Y-%m-%d"));
+        let url = format!("{base_url}/{filename}");
+        println!("Downloading: {url}");
+
+        let resp = client.get(&url).send()?;
+        if resp.status().is_success() {
+            let mut file = File::create(format!("data/{filename}"))?;
+            std::io::copy(&mut resp.bytes()?.as_ref(), &mut file)?;
+        } else {
+            eprintln!("Failed to download: {} (status {})", url, resp.status());
+        }
+
+        date = date.checked_add_days(Days::new(1)).unwrap();
+    }
+
+    Ok(())
+}
+
+/*
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Extract klines for a collection of symbols.
@@ -99,6 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //let parsed_symbols: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
     //export_pearson_correlations(&parsed_symbols).await?;
 
+    /*
     let symbols = ["BTCUSDT", "ETHUSDT"];
     let x: Array1<f64> = get_klines(symbols[0])
         .await?
@@ -113,6 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     println!("{:?}", x);
+    */
 
     /*
     let x_statistic = math::augmented_dickey_fuller_statistic(&x, 2);
@@ -123,7 +154,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     */
     Ok(())
 }
-
+*/
 async fn get_pearson_correlations<'a>(
     symbols: &'a [&str],
 ) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
