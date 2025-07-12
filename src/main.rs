@@ -1,9 +1,14 @@
-use std::collections::VecDeque;
+use ndarray::Array1;
+use serde::de::value;
+use std::collections::{self, HashMap, VecDeque};
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use tungstenite::connect;
 use url::Url;
 
+use crate::math::interpret_adf;
+
+mod math;
 mod models;
 
 // Identify two (or more) assets that are historically correlated or cointegrated.
@@ -58,7 +63,7 @@ fn main() {
             prices.push_back(price);
             quantities.push_back(quantity);
 
-            let average = prices.iter().sum::<f32>() / (prices.len() as f32);
+            let average = prices.iter().sum::<f64>() / (prices.len() as f64);
 
             print!("{average}");
             println!();
@@ -67,57 +72,110 @@ fn main() {
 }
 */
 
-fn parse_string_to_f32(s: String) -> Option<f32> {
-    let string_ref = s.as_str();
-    string_ref.parse::<f32>().ok()
+fn parse_string_to_f64(s: String) -> Option<f64> {
+    let trimmed = s.as_str().trim_matches('"');
+    trimmed.parse::<f64>().ok()
+}
+
+fn read_symbols_from_file(path: &str) -> std::io::Result<Vec<String>> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+
+    let symbols = reader
+        .lines()
+        .map_while(Result::ok)
+        .map(|line| line.trim().to_string())
+        .filter(|line| !line.is_empty())
+        .collect();
+
+    Ok(symbols)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let btc_usdt: Vec<f32> = get_klines("BTCUSDT")
+    // Extract klines for a collection of symbols.
+    // Used to identify correlated pairs.
+    //let symbols = read_symbols_from_file("resources/binance_symbols.txt")?;
+    //let parsed_symbols: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
+    //export_pearson_correlations(&parsed_symbols).await?;
+
+    let symbols = ["BTCUSDT", "ETHUSDT"];
+    let x: Array1<f64> = get_klines(symbols[0])
         .await?
         .iter()
-        .filter_map(|row| parse_string_to_f32(row[1].clone()))
+        .filter_map(|p| parse_string_to_f64(p[1].clone()))
         .collect();
 
-    let eth_usdt: Vec<f32> = get_klines("ETHUSDT")
+    let y: Array1<f64> = get_klines(symbols[1])
         .await?
         .iter()
-        .filter_map(|row| parse_string_to_f32(row[1].clone()))
+        .filter_map(|p| parse_string_to_f64(p[1].clone()))
         .collect();
 
-    let spread_ratio: Vec<f32> = btc_usdt
-        .iter()
-        .zip(eth_usdt.iter())
-        .map(|(a, b)| b / a)
-        .collect();
+    println!("{:?}", x);
 
-    let spread_average = spread_ratio.iter().sum::<f32>() / (spread_ratio.len() as f32);
-    let spread_std_dev: f32 = spread_ratio
-        .iter()
-        .map(|a| (a - spread_average).powf(2.0))
-        .sum();
-    let spread_std_dev = spread_std_dev.powf(1.0 / 2.0);
+    /*
+    let x_statistic = math::augmented_dickey_fuller_statistic(&x, 2);
+    let y_statistic = math::augmented_dickey_fuller_statistic(&y, 2);
 
-    let spread_z_scores: Vec<f32> = spread_ratio
-        .iter()
-        .map(|a| (a - spread_average) / spread_std_dev)
-        .collect();
+    println!("{:?}", interpret_adf(x_statistic));
+    println!("{:?}", interpret_adf(y_statistic));
+    */
+    Ok(())
+}
 
-    println!("{spread_z_scores:?}");
+async fn get_pearson_correlations<'a>(
+    symbols: &'a [&str],
+) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
+    let mut observations: Vec<Vec<f64>> = Vec::new();
 
+    for s in symbols {
+        let values = get_klines(s).await?;
+
+        let prices: Vec<f64> = values
+            .iter()
+            .filter_map(|p| parse_string_to_f64(p[1].clone()))
+            .collect();
+
+        let returns = math::to_log_returns(&prices);
+
+        observations.push(returns);
+    }
+    let mut correlations = HashMap::new();
+    for (a1, o1) in symbols.iter().zip(observations.iter()) {
+        for (a2, o2) in symbols.iter().zip(observations.iter()) {
+            //if a1 != a2 {
+            //    let reverse_key = (*a2, *a1);
+            //    if !correlations.contains_key(&reverse_key) {
+            println!("{a1} {a2}");
+            correlations.insert((*a1, *a2), math::pearson_correlation(o1, o2));
+            //    }
+            //}
+        }
+    }
+    Ok(correlations)
+}
+
+async fn export_pearson_correlations(symbols: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    let responses = get_pearson_correlations(symbols).await?;
+
+    let file = File::create("resources/correlations.txt")?;
+    let mut writer = BufWriter::new(file);
+    for ((ka, kb), v) in responses.iter() {
+        writeln!(writer, "{ka},{kb},{v}")?;
+    }
     Ok(())
 }
 
 async fn get_klines(symbol: &str) -> Result<Vec<Vec<String>>, Box<dyn std::error::Error>> {
     let url =
-        format!("https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1h&limit=1000");
+        format!("https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=1000");
 
     let response = reqwest::get(url)
         .await?
         .json::<Vec<Vec<serde_json::Value>>>()
         .await?;
-
+    println!("GET {symbol}");
     Ok(response
         .iter()
         .map(|row| row.iter().map(|entry| entry.to_string()).collect())
@@ -125,17 +183,11 @@ async fn get_klines(symbol: &str) -> Result<Vec<Vec<String>>, Box<dyn std::error
 }
 
 async fn export_klines(symbol: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let url =
-        format!("https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1h&limit=1000");
-    let response = reqwest::get(url)
-        .await?
-        .json::<Vec<Vec<serde_json::Value>>>()
-        .await?;
-
+    let response = get_klines(symbol).await?;
     let file = File::create(format!("resources/{symbol}_klines.txt"))?;
     let mut writer = BufWriter::new(file);
 
-    for row in response {
+    for row in response.iter() {
         let str_vec: Vec<String> = row.iter().map(|s| s.to_string()).collect();
         writeln!(writer, "{}", str_vec.join(","))?;
     }
@@ -143,20 +195,26 @@ async fn export_klines(symbol: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/*
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn get_exchange_information() -> Result<models::ExchangeInfo, Box<dyn std::error::Error>> {
     let url = "https://api.binance.com/api/v3/exchangeInfo";
     let response = reqwest::get(url)
         .await?
         .json::<models::ExchangeInfo>()
         .await?;
+    Ok(response)
+}
 
+async fn export_exchange_information() -> Result<(), Box<dyn std::error::Error>> {
     let file = File::create("resources/binance_symbols.txt")?;
     let mut writer = BufWriter::new(file);
-    writeln!(writer, "symbol,status,baseAsset,quoteAsset")?;
 
-    for s in response.symbols {
+    let response = get_exchange_information().await?;
+
+    for s in response
+        .symbols
+        .iter()
+        .filter(|sym| sym.status == "TRADING" && sym.quoteAsset == "USDT")
+    {
         writeln!(
             writer,
             "{},{},{},{}",
@@ -166,4 +224,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-*/
