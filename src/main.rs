@@ -1,14 +1,12 @@
-use chrono::Days;
-use ndarray::Array1;
-use serde::de::value;
-use std::collections::{self, HashMap, VecDeque};
-use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
-use tungstenite::connect;
-use url::Url;
+use chrono::{Months, TimeZone};
 
-use crate::math::interpret_adf;
+use crate::binance::websocket::stream_to_channel;
+use crate::fs::read::read_zip_file;
+use crate::models::RawTradeInformation;
 
+mod binance;
+mod errors;
+mod fs;
 mod math;
 mod models;
 
@@ -24,137 +22,71 @@ mod models;
 // Test different liquidity horizons.
 // How much data should be used to compute z-score ?
 // Try other distributions ?
-/*
-static BASE_END_POINT: &str = "wss://stream.binance.com:9443";
-fn main() {
-    //let stream = "btcusdt@depth5@100ms";
-    //let stream = "btcusdt@trade";
-    let stream = "ethusdt@trade";
-    let end_point = format!("{BASE_END_POINT}/ws/{stream}");
 
-    let url = Url::parse(&end_point).unwrap();
-    let (mut socket, response) = connect(url).expect("Can't connect.");
-
-    println!("Connected to binance stream.");
-    println!("HTTP status code: {}", response.status());
-    println!("Response headers:");
-    for (ref header, ref header_value) in response.headers() {
-        println!("- {header}: {header_value:?}");
-    }
-    println!();
-    let mut prices = VecDeque::with_capacity(100);
-    let mut quantities = VecDeque::with_capacity(100);
-
-    loop {
-        let msg = socket.read_message().expect("Error reading message");
-
-        if let tungstenite::Message::Text(s) = msg {
-            let parsed: models::RawTradeInformation =
-                serde_json::from_str(&s).expect("Can't parse");
-
-            let symbol = parsed.s;
-            let price = parsed.p;
-            let quantity = parsed.q;
-            print!("{symbol} {price} {quantity} ");
-
-            if prices.len() == 100 {
-                prices.pop_front();
-                quantities.pop_front();
-            }
-            prices.push_back(price);
-            quantities.push_back(quantity);
-
-            let average = prices.iter().sum::<f64>() / (prices.len() as f64);
-
-            print!("{average}");
-            println!();
-        }
-    }
-}
-*/
-
-fn parse_string_to_f64(s: String) -> Option<f64> {
-    let trimmed = s.as_str().trim_matches('"');
-    trimmed.parse::<f64>().ok()
-}
-
-fn read_symbols_from_file(path: &str) -> std::io::Result<Vec<String>> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-
-    let symbols = reader
-        .lines()
-        .map_while(Result::ok)
-        .map(|line| line.trim().to_string())
-        .filter(|line| !line.is_empty())
-        .collect();
-
-    Ok(symbols)
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let base_url = "https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1h";
-    let start_date = chrono::NaiveDate::from_ymd_opt(2022, 1, 1).unwrap();
-    let end_date = chrono::NaiveDate::from_ymd_opt(2022, 1, 31).unwrap();
-
-    let client = reqwest::blocking::Client::new();
-
-    let mut date = start_date;
-    while date <= end_date {
-        let filename = format!("BTCUSDT-1h-{}.zip", date.format("%Y-%m-%d"));
-        let url = format!("{base_url}/{filename}");
-        println!("Downloading: {url}");
-
-        let resp = client.get(&url).send()?;
-        if resp.status().is_success() {
-            let mut file = File::create(format!("data/{filename}"))?;
-            std::io::copy(&mut resp.bytes()?.as_ref(), &mut file)?;
-        } else {
-            eprintln!("Failed to download: {} (status {})", url, resp.status());
-        }
-
-        date = date.checked_add_days(Days::new(1)).unwrap();
-    }
-
-    Ok(())
-}
-
-/*
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Extract klines for a collection of symbols.
-    // Used to identify correlated pairs.
-    //let symbols = read_symbols_from_file("resources/binance_symbols.txt")?;
-    //let parsed_symbols: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
-    //export_pearson_correlations(&parsed_symbols).await?;
+    //binance::historical::get_historical_data("monthly", "ETHUSDT", "1m").await?;
+
+    let start_date = chrono::NaiveDate::from_ymd_opt(2017, 8, 1).unwrap();
+    let end_data = chrono::NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
+    let mut data = Vec::new();
+
+    let mut current_date = start_date;
+    while current_date <= end_data {
+        let file = &format!(
+            "raw_data/BTCUSDT/BTCUSDT-1m-{}.zip",
+            current_date.format("%Y-%m")
+        );
+        println!("{:?}", &file);
+        let content = read_zip_file(file).await?;
+
+        for line in content.lines() {
+            let entries: Vec<&str> = line.split(",").take(2).collect();
+            if let (Some(ts_str), Some(price)) = (entries.first(), entries.get(1)) {
+                if let Ok(ms) = ts_str.parse::<i64>() {
+                    let secs = ms / 1000;
+                    let nsecs = ((ms % 1000) * 1_000_000) as u32;
+
+                    if let chrono::LocalResult::Single(datetime) =
+                        chrono::Utc.timestamp_opt(secs, nsecs)
+                    {
+                        data.push((datetime, price.to_string()));
+                    }
+                }
+            }
+        }
+        current_date = current_date.checked_add_months(Months::new(1)).unwrap();
+    }
+
+    println!("{data:?}");
 
     /*
-    let symbols = ["BTCUSDT", "ETHUSDT"];
-    let x: Array1<f64> = get_klines(symbols[0])
-        .await?
-        .iter()
-        .filter_map(|p| parse_string_to_f64(p[1].clone()))
-        .collect();
+    let (tx1, rx1) = std::sync::mpsc::channel::<RawTradeInformation>();
+    let (tx2, rx2) = std::sync::mpsc::channel::<RawTradeInformation>();
+    let btc_handle = stream_to_channel("btcusdt", tx1);
+    let eth_handle = stream_to_channel("ethusdt", tx2);
 
-    let y: Array1<f64> = get_klines(symbols[1])
-        .await?
-        .iter()
-        .filter_map(|p| parse_string_to_f64(p[1].clone()))
-        .collect();
+    let handle1 = std::thread::spawn(move || {
+        for trade in rx1 {
+            println!("[ETH] {trade:?}");
+        }
+    });
 
-    println!("{:?}", x);
-    */
+    let handle2 = std::thread::spawn(move || {
+        for trade in rx2 {
+            println!("[BTC] {trade:?}");
+        }
+    });
 
-    /*
-    let x_statistic = math::augmented_dickey_fuller_statistic(&x, 2);
-    let y_statistic = math::augmented_dickey_fuller_statistic(&y, 2);
-
-    println!("{:?}", interpret_adf(x_statistic));
-    println!("{:?}", interpret_adf(y_statistic));
+    // Wait for all threads
+    btc_handle.join().unwrap()?;
+    eth_handle.join().unwrap()?;
+    handle1.join().unwrap();
+    handle2.join().unwrap();
     */
     Ok(())
 }
-*/
+/*
 async fn get_pearson_correlations<'a>(
     symbols: &'a [&str],
 ) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
@@ -165,7 +97,7 @@ async fn get_pearson_correlations<'a>(
 
         let prices: Vec<f64> = values
             .iter()
-            .filter_map(|p| parse_string_to_f64(p[1].clone()))
+            .filter_map(|p| fs::parse::checked_string_to_f64(p[1].clone()))
             .collect();
 
         let returns = math::to_log_returns(&prices);
@@ -255,3 +187,4 @@ async fn export_exchange_information() -> Result<(), Box<dyn std::error::Error>>
 
     Ok(())
 }
+*/
