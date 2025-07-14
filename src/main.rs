@@ -1,8 +1,6 @@
-use chrono::{Months, TimeZone};
+use std::io::{BufRead, BufReader};
 
-use crate::binance::websocket::stream_to_channel;
-use crate::fs::read::read_zip_file;
-use crate::models::RawTradeInformation;
+use crate::{binance::websocket::stream_to_channel, fs::read};
 
 mod binance;
 mod errors;
@@ -23,48 +21,43 @@ mod models;
 // How much data should be used to compute z-score ?
 // Try other distributions ?
 
+fn read_klines(f: &str) -> Option<Vec<f64>> {
+    let file = std::fs::File::open(f).ok()?;
+    let reader = BufReader::new(file);
+    let mut prices = Vec::new();
+    for line in reader.lines().map_while(Result::ok) {
+        let entries: Vec<&str> = line.split(",").collect();
+        if let Some(entry) = crate::fs::parse::checked_string_to_f64(entries[1].to_string()) {
+            prices.push(entry);
+        }
+    }
+    Some(prices)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    //binance::historical::get_historical_data("monthly", "ETHUSDT", "1m").await?;
+    let file1 = "resources/BTCUSDT_klines.txt";
+    let file2 = "resources/ETHUSDT_klines.txt";
 
-    let start_date = chrono::NaiveDate::from_ymd_opt(2017, 8, 1).unwrap();
-    let end_data = chrono::NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
-    let mut data = Vec::new();
+    let data1 = read_klines(file1).unwrap();
+    let data2 = read_klines(file2).unwrap();
 
-    let mut current_date = start_date;
-    while current_date <= end_data {
-        let file = &format!(
-            "raw_data/BTCUSDT/BTCUSDT-1m-{}.zip",
-            current_date.format("%Y-%m")
-        );
-        println!("{:?}", &file);
-        let content = read_zip_file(file).await?;
-
-        for line in content.lines() {
-            let entries: Vec<&str> = line.split(",").take(2).collect();
-            if let (Some(ts_str), Some(price)) = (entries.first(), entries.get(1)) {
-                if let Ok(ms) = ts_str.parse::<i64>() {
-                    let secs = ms / 1000;
-                    let nsecs = ((ms % 1000) * 1_000_000) as u32;
-
-                    if let chrono::LocalResult::Single(datetime) =
-                        chrono::Utc.timestamp_opt(secs, nsecs)
-                    {
-                        data.push((datetime, price.to_string()));
-                    }
-                }
-            }
-        }
-        current_date = current_date.checked_add_months(Months::new(1)).unwrap();
+    let residuals = math::compute_residuals(&data1, &data2).unwrap();
+    for r in residuals {
+        println!("{r:?}");
     }
 
-    println!("{data:?}");
+    //let res = math::AugmentedDicketFuller::statistic(&residuals, 1);
+    //println!("{res:?}");
 
     /*
-    let (tx1, rx1) = std::sync::mpsc::channel::<RawTradeInformation>();
-    let (tx2, rx2) = std::sync::mpsc::channel::<RawTradeInformation>();
-    let btc_handle = stream_to_channel("btcusdt", tx1);
-    let eth_handle = stream_to_channel("ethusdt", tx2);
+    //binance::historical::get_historical_data("monthly", "ETHUSDT", "1m").await?;
+
+    let (tx1, rx1) = std::sync::mpsc::channel::<models::KlineEvent>();
+    let (tx2, rx2) = std::sync::mpsc::channel::<models::KlineEvent>();
+    let interval = binance::websocket::KlineInterval::OneMinute;
+    let btc_handle = stream_to_channel("btcusdt", &interval, tx1);
+    let eth_handle = stream_to_channel("ethusdt", &interval, tx2);
 
     let handle1 = std::thread::spawn(move || {
         for trade in rx1 {

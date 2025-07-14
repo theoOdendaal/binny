@@ -1,5 +1,4 @@
-use ndarray::{Array1, Array2, s};
-use ndarray_linalg::Inverse;
+use nalgebra::{DMatrix, DVector};
 
 fn mean(observations: &[f64]) -> f64 {
     observations.iter().sum::<f64>() / observations.len() as f64
@@ -49,57 +48,110 @@ pub fn to_log_returns(observations: &[f64]) -> Vec<f64> {
         .collect()
 }
 
-fn difference(observations: &Array1<f64>) -> Array1<f64> {
-    observations
-        .iter()
-        .skip(1)
-        .zip(observations.iter())
-        .map(|(a, b)| (a - b))
-        .collect()
-}
+pub struct OLSRegression {}
 
-fn prepare_augmented_dickey_fuller(y: &Array1<f64>, max_lags: usize) -> (Array2<f64>, Array1<f64>) {
-    let dy = difference(y);
-    let n = dy.len() - max_lags;
-
-    let mut x = Array2::<f64>::ones((n, 1));
-    let y_lag = y
-        .slice(s![max_lags - 1..y.len() - 1])
-        .to_owned()
-        .insert_axis(ndarray::Axis(1));
-    x = ndarray::concatenate![ndarray::Axis(1), x, y_lag];
-
-    for i in 1..=max_lags {
-        let slice = dy.slice(s![max_lags - i..dy.len() - i]).to_owned();
-        let lagged = slice.insert_axis(ndarray::Axis(1));
-        x = ndarray::concatenate![ndarray::Axis(1), x, lagged];
+pub fn compute_residuals(y: &[f64], x: &[f64]) -> Option<Vec<f64>> {
+    if y.len() != x.len() || y.len() < 2 {
+        return None;
     }
 
-    let y_target = dy.slice(s![max_lags..]).to_owned();
+    let n = y.len();
 
-    (x, y_target)
+    // Construct design matrix with a column of ones (for intercept) and x values
+    let mut data = Vec::with_capacity(n * 2);
+    for &xi in x {
+        data.push(1.0);
+        data.push(xi);
+    }
+
+    let x_matrix = DMatrix::from_row_slice(n, 2, &data);
+    let y_vector = DVector::from_row_slice(y);
+
+    // OLS: beta = (X^T.X)^(-1).(X^T).(y)
+    let xtx = x_matrix.transpose() * &x_matrix;
+    let xtx_inv = xtx.try_inverse()?;
+    let xty = x_matrix.transpose() * y_vector.clone();
+    let beta = xtx_inv * xty;
+
+    // Residuals: y - X.b
+    let predicted = x_matrix * beta;
+    let residuals = y_vector - predicted;
+
+    Some(residuals.iter().copied().collect())
 }
 
-fn ols_beta(x: &Array2<f64>, y: &Array1<f64>) -> (Array1<f64>, f64) {
-    let xtx = x.t().dot(x);
-    let xtx_inv = xtx.inv().unwrap();
-    let xty = x.t().dot(y);
-    let beta = xtx_inv.dot(&xty);
+pub struct AugmentedDicketFuller {}
 
-    let residuals = y - &x.dot(&beta);
-    let sigma2 = residuals.mapv(|e| e.powi(2)).sum() / (y.len() as f64 - x.shape()[1] as f64);
-    let se_squared = xtx_inv[(1, 1)] * sigma2;
-    let se = se_squared.sqrt();
+impl AugmentedDicketFuller {
+    /// Construct y delta's and lagged variables given y-coordinates,
+    /// used for Augmented Dickey Fuller regression.
+    fn generate_variables(y: &[f64], max_lags: usize) -> (Vec<Vec<f64>>, Vec<f64>) {
+        // Requires at least one lag, in order to compensate for change in y calculation
+        // reducing y length with 1.
+        let l = max_lags.max(1);
+        let n = y.len() - l;
 
-    (beta, se)
+        // y delta's
+        // Assumes the collection is sorted from oldest to
+        // newest.
+        let dy: Vec<f64> = y.windows(2).map(|w| w[1] - w[0]).collect();
+        let dy = dy[l - 1..].to_vec();
+
+        // Lagged y's
+        let mut ly = Vec::new();
+        for i in (0..(max_lags)).rev() {
+            ly.push(y[i..(n + i)].to_vec());
+        }
+
+        (ly, dy)
+    }
+
+    // Matrix friendly Ordinary Least Squares (OLS) regression
+    // Returns
+    fn ols_beta(x: &DMatrix<f64>, y: &DVector<f64>) -> Option<(DVector<f64>, f64)> {
+        let n = x.nrows() as f64;
+        let k = x.ncols() as f64;
+
+        // (X^T X)
+        let xtx = x.transpose() * x;
+        // Try inverse
+        let xtx_inv = xtx.try_inverse()?;
+
+        // (X^T y)
+        let xty = x.transpose() * y;
+
+        // beta = (X^T X)^-1 X^T y
+        let beta = &xtx_inv * xty;
+
+        // residuals = y - X beta
+        let residuals = y - &(x * &beta);
+
+        // sigma^2 = RSS / (n - k)
+        let rss = residuals.dot(&residuals);
+        let sigma2 = rss / (n - k);
+
+        // Standard error for coefficient at index 1
+        let se_squared = xtx_inv[(1, 1)] * sigma2;
+        let se = se_squared.sqrt();
+
+        Some((beta, se))
+    }
+
+    /// Calculates ADF gamma.
+    pub fn statistic(y: &[f64], max_lags: usize) -> Option<f64> {
+        let (x, y) = Self::generate_variables(y, max_lags);
+        if let Some((beta, se)) = Self::ols_beta(
+            &DMatrix::from_vec(x.len(), x[0].len(), x.concat()),
+            &DVector::from_vec(y),
+        ) {
+            return Some(beta[1] / se);
+        }
+        None
+    }
 }
 
-pub fn augmented_dickey_fuller_statistic(y: &Array1<f64>, max_lags: usize) -> f64 {
-    let (x, y_diff) = prepare_augmented_dickey_fuller(y, max_lags);
-    let (beta, se) = ols_beta(&x, &y_diff);
-    let gamma = beta[1];
-    gamma / se
-}
+/*
+
 
 pub fn interpret_adf(t_stat: f64) {
     println!("ADF Test Statistic: {:.4}", t_stat);
@@ -118,3 +170,4 @@ pub fn interpret_adf(t_stat: f64) {
         println!("=> Fail to reject H₀: Series is non-stationary");
     }
 }
+*/

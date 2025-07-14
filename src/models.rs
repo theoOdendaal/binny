@@ -9,24 +9,6 @@ where
     str_val.parse::<f32>().map_err(de::Error::custom)
 }
 
-#[derive(Debug, Deserialize)]
-pub struct OfferData {
-    #[serde(deserialize_with = "de_float_from_str")]
-    pub price: f32,
-    #[serde(deserialize_with = "de_float_from_str")]
-    pub size: f32,
-}
-
-// btcusdt@depth5@100ms
-// <symbol>@depth<levels> OR <symbol>@depth<levels>@100ms
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DepthStreamData {
-    pub last_update_id: usize,
-    pub bids: Vec<OfferData>,
-    pub asks: Vec<OfferData>,
-}
-
 // btcusdt@trade
 // <symbol>@trade
 #[derive(Debug, Deserialize)]
@@ -55,4 +37,33 @@ pub struct SymbolInfo {
     pub status: String,
     pub baseAsset: String,
     pub quoteAsset: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct KlineEvent {
+    e: String, //Event type
+    E: u64,    //Event time
+    s: String, //Symbol
+    k: Kline,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Kline {
+    pub t: u64,    // Kline start time
+    pub T: u64,    // Kline close time
+    pub s: String, // Symbol
+    pub i: String, // Interval (e.g. "1m")
+    pub f: u64,    // First trade ID
+    pub L: u64,    // Last trade ID
+    pub o: String, // Open price
+    pub c: String, // Close price
+    pub h: String, // High price
+    pub l: String, // Low price
+    pub v: String, // Volume (base asset)
+    pub n: u64,    // Number of trades
+    pub x: bool,   // Is this kline closed?
+    pub q: String, // Quote asset volume
+    pub V: String, // Taker buy base asset volume
+    pub Q: String, // Taker buy quote asset volume
+    pub B: String, // Unused, can be ignored
 }
