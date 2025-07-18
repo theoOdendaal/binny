@@ -4,6 +4,7 @@ use crate::errors;
 use tokio::io::AsyncWriteExt;
 
 const BASE: &str = "https://data.binance.vision/data";
+const STORAGE_DIR: &str = "data/";
 
 /*
 const INTERVAL: [&str; 2] = ["daily", "monthly"];
@@ -51,7 +52,8 @@ pub async fn get_historical_data(
         let url = format!("{base_url}/{filename}");
         println!("Downloading: {url}");
 
-        let mut writer = tokio::fs::File::create(format!("raw_data/{symbol}/{filename}")).await?;
+        let mut writer =
+            tokio::fs::File::create(format!("{STORAGE_DIR}/{symbol}/{filename}")).await?;
         retrieve_file(&client, &mut writer, &url).await?;
 
         date = date.checked_add_months(chrono::Months::new(1)).unwrap();

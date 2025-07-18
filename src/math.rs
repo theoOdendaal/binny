@@ -170,4 +170,138 @@ pub fn interpret_adf(t_stat: f64) {
         println!("=> Fail to reject H₀: Series is non-stationary");
     }
 }
+
+
+
+
+
+async fn get_pearson_correlations<'a>(
+    symbols: &'a [&str],
+) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
+    let mut observations: Vec<Vec<f64>> = Vec::new();
+
+    for s in symbols {
+        let values = get_klines(s).await?;
+
+        let prices: Vec<f64> = values
+            .iter()
+            .filter_map(|p| fs::parse::checked_string_to_f64(p[1].clone()))
+            .collect();
+
+        let returns = math::to_log_returns(&prices);
+
+        observations.push(returns);
+    }
+    let mut correlations = HashMap::new();
+    for (a1, o1) in symbols.iter().zip(observations.iter()) {
+        for (a2, o2) in symbols.iter().zip(observations.iter()) {
+            //if a1 != a2 {
+            //    let reverse_key = (*a2, *a1);
+            //    if !correlations.contains_key(&reverse_key) {
+            println!("{a1} {a2}");
+            correlations.insert((*a1, *a2), math::pearson_correlation(o1, o2));
+            //    }
+            //}
+        }
+    }
+    Ok(correlations)
+}
+
+async fn export_pearson_correlations(symbols: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    let responses = get_pearson_correlations(symbols).await?;
+
+    let file = File::create("resources/correlations.txt")?;
+    let mut writer = BufWriter::new(file);
+    for ((ka, kb), v) in responses.iter() {
+        writeln!(writer, "{ka},{kb},{v}")?;
+    }
+    Ok(())
+}
+
+async fn get_pearson_correlations<'a>(
+    symbols: &'a [&str],
+) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
+    let mut observations: Vec<Vec<f64>> = Vec::new();
+
+    for s in symbols {
+        let values = get_klines(s).await?;
+
+        let prices: Vec<f64> = values
+            .iter()
+            .filter_map(|p| fs::parse::checked_string_to_f64(p[1].clone()))
+            .collect();
+
+        let returns = math::to_log_returns(&prices);
+
+        observations.push(returns);
+    }
+    let mut correlations = HashMap::new();
+    for (a1, o1) in symbols.iter().zip(observations.iter()) {
+        for (a2, o2) in symbols.iter().zip(observations.iter()) {
+            //if a1 != a2 {
+            //    let reverse_key = (*a2, *a1);
+            //    if !correlations.contains_key(&reverse_key) {
+            println!("{a1} {a2}");
+            correlations.insert((*a1, *a2), math::pearson_correlation(o1, o2));
+            //    }
+            //}
+        }
+    }
+    Ok(correlations)
+}
+
+async fn export_pearson_correlations(symbols: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    let responses = get_pearson_correlations(symbols).await?;
+
+    let file = File::create("resources/correlations.txt")?;
+    let mut writer = BufWriter::new(file);
+    for ((ka, kb), v) in responses.iter() {
+        writeln!(writer, "{ka},{kb},{v}")?;
+    }
+    Ok(())
+}
+
+async fn get_pearson_correlations<'a>(
+    symbols: &'a [&str],
+) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
+    let mut observations: Vec<Vec<f64>> = Vec::new();
+
+    for s in symbols {
+        let values = get_klines(s).await?;
+
+        let prices: Vec<f64> = values
+            .iter()
+            .filter_map(|p| fs::parse::checked_string_to_f64(p[1].clone()))
+            .collect();
+
+        let returns = math::to_log_returns(&prices);
+
+        observations.push(returns);
+    }
+    let mut correlations = HashMap::new();
+    for (a1, o1) in symbols.iter().zip(observations.iter()) {
+        for (a2, o2) in symbols.iter().zip(observations.iter()) {
+            //if a1 != a2 {
+            //    let reverse_key = (*a2, *a1);
+            //    if !correlations.contains_key(&reverse_key) {
+            println!("{a1} {a2}");
+            correlations.insert((*a1, *a2), math::pearson_correlation(o1, o2));
+            //    }
+            //}
+        }
+    }
+    Ok(correlations)
+}
+
+async fn export_pearson_correlations(symbols: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    let responses = get_pearson_correlations(symbols).await?;
+
+    let file = File::create("resources/correlations.txt")?;
+    let mut writer = BufWriter::new(file);
+    for ((ka, kb), v) in responses.iter() {
+        writeln!(writer, "{ka},{kb},{v}")?;
+    }
+    Ok(())
+}
+
 */
