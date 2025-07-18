@@ -1,10 +1,10 @@
 use crate::models;
 use tokio::io::AsyncWriteExt;
 use tokio::{fs::File, io::BufWriter};
+const BASE: &str = "https://api.binance.com/api/v3";
 
 async fn get_klines(symbol: &str) -> Result<Vec<Vec<String>>, Box<dyn std::error::Error>> {
-    let url =
-        format!("https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=1000");
+    let url = format!("{BASE}/klines?symbol={symbol}&interval=1d&limit=1000");
 
     let response = reqwest::get(url)
         .await?
@@ -33,7 +33,7 @@ async fn export_klines(symbol: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn get_exchange_information() -> Result<models::ExchangeInfo, Box<dyn std::error::Error>> {
-    let url = "https://api.binance.com/api/v3/exchangeInfo";
+    let url = "{BASE}/exchangeInfo";
     let response = reqwest::get(url)
         .await?
         .json::<models::ExchangeInfo>()
@@ -65,4 +65,3 @@ async fn export_exchange_information() -> Result<(), Box<dyn std::error::Error>>
 
     Ok(())
 }
-

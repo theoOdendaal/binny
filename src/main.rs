@@ -8,7 +8,6 @@ mod errors;
 mod fs;
 mod math;
 mod models;
-use binance::websocket::stream_to_channel;
 
 use crate::errors::Error;
 
@@ -38,7 +37,8 @@ fn read_klines(f: &str) -> Option<Vec<f64>> {
     Some(prices)
 }
 
-fn init_structure() -> Result<(), Error> {
+/// Initialize required directories.
+fn init_dirs() -> Result<(), Error> {
     let dir_path = ["data"];
     for path in dir_path {
         let dir = Path::new(path);
@@ -52,7 +52,7 @@ fn init_structure() -> Result<(), Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    init_structure()?;
+    init_dirs()?;
     // let file1 = "resources/BTCUSDT_klines.txt";
     // let file2 = "resources/ETHUSDT_klines.txt";
 
@@ -67,8 +67,9 @@ async fn main() -> Result<(), Error> {
     //let res = math::AugmentedDicketFuller::statistic(&residuals, 1);
     //println!("{res:?}");
 
-    //binance::historical::get_historical_data("monthly", "ETHUSDT", "1m").await?;
-
+    binance::historical::get_historical_data_range("monthly", "ETHUSDT", "1m").await?;
+    binance::historical::get_historical_data_range("monthly", "BTCUSDT", "1m").await?;
+    /*
     let (tx1, rx1) = std::sync::mpsc::channel::<models::KlineEvent>();
     let (tx2, rx2) = std::sync::mpsc::channel::<models::KlineEvent>();
     let interval = binance::websocket::KlineInterval::OneMinute;
@@ -92,5 +93,6 @@ async fn main() -> Result<(), Error> {
     eth_handle.join().unwrap()?;
     handle1.join().unwrap();
     handle2.join().unwrap();
+    */
     Ok(())
 }
