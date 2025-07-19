@@ -1,8 +1,3 @@
-use std::{
-    io::{BufRead, BufReader},
-    path::Path,
-};
-
 mod binance;
 mod errors;
 mod fs;
@@ -10,7 +5,11 @@ mod math;
 mod models;
 
 use crate::errors::Error;
-
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 // Identify two (or more) assets that are historically correlated or cointegrated.
 // Ex. btcusdt and ethusdt.
 // When their price spread deviates significantly from the typical range,
@@ -25,7 +24,7 @@ use crate::errors::Error;
 // Try other distributions ?
 
 fn read_klines(f: &str) -> Option<Vec<f64>> {
-    let file = std::fs::File::open(f).ok()?;
+    let file = File::open(f).ok()?;
     let reader = BufReader::new(file);
     let mut prices = Vec::new();
     for line in reader.lines().map_while(Result::ok) {
