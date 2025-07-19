@@ -7,7 +7,6 @@ mod models;
 use crate::errors::Error;
 use crate::fs::read::{identify_files, read_csv_from_zip_file};
 use crate::models::{FromDelimitedString, HistoricalKlineEvent};
-use std::path::Path;
 // Identify two (or more) assets that are historically correlated or cointegrated.
 // Ex. btcusdt and ethusdt.
 // When their price spread deviates significantly from the typical range,
@@ -21,23 +20,8 @@ use std::path::Path;
 // How much data should be used to compute z-score ?
 // Try other distributions ?
 
-/// Initialize required directories.
-fn init_dirs() -> Result<(), Error> {
-    let dir_path = ["data"];
-    for path in dir_path {
-        let dir = Path::new(path);
-        if !dir.exists() && !dir.is_dir() {
-            std::fs::create_dir(dir)?;
-        }
-    }
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    init_dirs()?;
-
     // Retrieve data.
     binance::historical::get_historical_data_range("monthly", "ETHUSDT", "1m").await?;
     binance::historical::get_historical_data_range("monthly", "BTCUSDT", "1m").await?;
@@ -56,6 +40,7 @@ async fn main() -> Result<(), Error> {
             prices.push((time, price));
         }
     }
+
     // println!("{:?}", &prices);
 
     // let res = math::AugmentedDicketFuller::statistic(&residuals, 1);
