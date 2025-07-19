@@ -1,34 +1,15 @@
-use std::io::Read;
-
-use tokio::io::AsyncBufReadExt;
+use std::path::{Path, PathBuf};
+use std::{fs, io::Read};
 use zip::ZipArchive;
 
 use crate::errors;
-
-/// Read file, treating each lines as one String.
-pub async fn without_delimiter(path: &str) -> Result<Vec<String>, errors::Error> {
-    let file = tokio::fs::File::open(path).await?;
-    let reader = tokio::io::BufReader::new(file);
-
-    let mut lines = reader.lines();
-    let mut parsed_lines = Vec::new();
-
-    while let Some(line) = lines.next_line().await? {
-        let trimmed = line.trim();
-        if !trimmed.is_empty() {
-            parsed_lines.push(trimmed.to_string());
-        }
-    }
-
-    Ok(parsed_lines)
-}
 
 /// Reads the content of a CSV file inside a ZIP archive.
 /// The function expects that the ZIP archive contains a single CSV file whose
 /// filename matches the name of the ZIP file (excluding the `.zip` extension)
 /// with a `.csv` extension.
-pub async fn read_zip_file(path: &str) -> Result<String, errors::Error> {
-    let zip_path = std::path::Path::new(path);
+pub async fn read_csv_from_zip_file<P: AsRef<Path>>(path: P) -> Result<String, errors::Error> {
+    let zip_path = path.as_ref();
     let file = std::fs::File::open(zip_path)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
@@ -42,4 +23,18 @@ pub async fn read_zip_file(path: &str) -> Result<String, errors::Error> {
         }
     }
     Ok(content)
+}
+
+/// Creates a collection of all files within a
+/// specified directory.
+pub fn identify_files<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() {
+            files.push(path);
+        }
+    }
+    Ok(files)
 }

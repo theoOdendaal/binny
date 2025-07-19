@@ -5,6 +5,7 @@ pub enum Error {
     Stream(tungstenite::Error),
     Serde(serde_json::Error),
     Zip(zip::result::ZipError),
+    Parse(String),
     Other(String),
 }
 
@@ -16,6 +17,7 @@ impl std::fmt::Display for Error {
             Self::Stream(e) => write!(f, "{e}"),
             Self::Serde(e) => write!(f, "{e}"),
             Self::Zip(e) => write!(f, "{e}"),
+            Self::Parse(e) => write!(f, "{e}"),
             Self::Other(e) => write!(f, "{e}"),
         }
     }
@@ -50,5 +52,11 @@ impl From<serde_json::Error> for Error {
 impl From<zip::result::ZipError> for Error {
     fn from(value: zip::result::ZipError) -> Self {
         Error::Zip(value)
+    }
+}
+
+impl From<std::num::ParseFloatError> for Error {
+    fn from(value: std::num::ParseFloatError) -> Self {
+        Error::Parse(value.to_string())
     }
 }

@@ -1,6 +1,8 @@
+/// Retrieve historical data from the binance archives.
 use std::{fs::create_dir_all, path::Path};
 
 use crate::errors;
+use chrono::NaiveDate;
 use tokio::io::AsyncWriteExt;
 
 const BASE: &str = "https://data.binance.vision/data";
@@ -26,6 +28,10 @@ async fn retrieve_file(
     Ok(())
 }
 
+fn create_binance_file_name(symbol: &str, frequency: &str, date: &NaiveDate) -> String {
+    format!("{symbol}-{frequency}-{}.zip", date.format("%Y-%m"))
+}
+
 pub async fn get_historical_data_range(
     interval: &str,
     symbol: &str,
@@ -33,13 +39,13 @@ pub async fn get_historical_data_range(
 ) -> Result<(), errors::Error> {
     let dir = format!("spot/{interval}/klines/{symbol}/{frequency}");
     let base_url = format!("{BASE}/{dir}");
-    let start_date = chrono::NaiveDate::from_ymd_opt(2017, 8, 1).unwrap();
+    let start_date = chrono::NaiveDate::from_ymd_opt(2019, 7, 1).unwrap();
     let end_date = chrono::NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
     let client = reqwest::Client::new();
 
     let mut date = start_date;
     while date <= end_date {
-        let filename = format!("{symbol}-{frequency}-{}.zip", date.format("%Y-%m"));
+        let filename = create_binance_file_name(symbol, frequency, &date);
         let url = format!("{base_url}/{filename}");
 
         let path_dir = &format!("data/{dir}");

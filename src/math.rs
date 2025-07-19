@@ -1,42 +1,18 @@
 use nalgebra::{DMatrix, DVector};
 
-fn mean(observations: &[f64]) -> f64 {
-    observations.iter().sum::<f64>() / observations.len() as f64
-}
-
-fn sum_of_squared_deviations(observations: &[f64]) -> f64 {
-    let observations_mean = mean(observations);
-    observations
-        .iter()
-        .map(|o| (o - observations_mean).powf(2.0))
-        .sum::<f64>()
-}
-
-fn sample_variance(observations: &[f64]) -> f64 {
-    sum_of_squared_deviations(observations) / (observations.len() - 1) as f64
-}
-
-fn population_variance(observations: &[f64]) -> f64 {
-    sum_of_squared_deviations(observations) / observations.len() as f64
-}
-
-fn sample_standard_deviation(observations: &[f64]) -> f64 {
-    sample_variance(observations).sqrt()
-}
-
-fn population_standard_deviation(observations: &[f64]) -> f64 {
-    population_variance(observations).sqrt()
-}
-
-pub fn pearson_correlation(x: &[f64], y: &[f64]) -> f64 {
-    let mean_x = mean(x);
-    let mean_y = mean(y);
-    let n = x.len();
-    let numerator: f64 = (0..n).map(|i| (x[i] - mean_x) * (y[i] - mean_y)).sum();
-    let denominator_x: f64 = (0..n).map(|i| (x[i] - mean_x).powi(2)).sum::<f64>().sqrt();
-    let denominator_y: f64 = (0..n).map(|i| (y[i] - mean_y).powi(2)).sum::<f64>().sqrt();
-    numerator / (denominator_x * denominator_y)
-}
+// fn mean(observations: &[f64]) -> f64 {
+//     observations.iter().sum::<f64>() / observations.len() as f64
+// }
+//
+// pub fn pearson_correlation(x: &[f64], y: &[f64]) -> f64 {
+//     let mean_x = mean(x);
+//     let mean_y = mean(y);
+//     let n = x.len();
+//     let numerator: f64 = (0..n).map(|i| (x[i] - mean_x) * (y[i] - mean_y)).sum();
+//     let denominator_x: f64 = (0..n).map(|i| (x[i] - mean_x).powi(2)).sum::<f64>().sqrt();
+//     let denominator_y: f64 = (0..n).map(|i| (y[i] - mean_y).powi(2)).sum::<f64>().sqrt();
+//     numerator / (denominator_x * denominator_y)
+// }
 
 /// Conversion of spot prices to log returns.
 pub fn to_log_returns(observations: &[f64]) -> Vec<f64> {
@@ -47,8 +23,6 @@ pub fn to_log_returns(observations: &[f64]) -> Vec<f64> {
         .map(|(a, b)| (a / b - 1.0).ln())
         .collect()
 }
-
-pub struct OLSRegression {}
 
 pub fn compute_residuals(y: &[f64], x: &[f64]) -> Option<Vec<f64>> {
     if y.len() != x.len() || y.len() < 2 {
@@ -149,159 +123,3 @@ impl AugmentedDicketFuller {
         None
     }
 }
-
-/*
-
-
-pub fn interpret_adf(t_stat: f64) {
-    println!("ADF Test Statistic: {:.4}", t_stat);
-    println!("Critical Values (approx):");
-    println!("  1%: -3.43");
-    println!("  5%: -2.86");
-    println!(" 10%: -2.57");
-
-    if t_stat < -3.43 {
-        println!("=> Reject H₀: Series is stationary (1% level)");
-    } else if t_stat < -2.86 {
-        println!("=> Reject H₀: Series is stationary (5% level)");
-    } else if t_stat < -2.57 {
-        println!("=> Weak evidence against H₀ (10% level)");
-    } else {
-        println!("=> Fail to reject H₀: Series is non-stationary");
-    }
-}
-
-
-
-
-
-async fn get_pearson_correlations<'a>(
-    symbols: &'a [&str],
-) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
-    let mut observations: Vec<Vec<f64>> = Vec::new();
-
-    for s in symbols {
-        let values = get_klines(s).await?;
-
-        let prices: Vec<f64> = values
-            .iter()
-            .filter_map(|p| fs::parse::checked_string_to_f64(p[1].clone()))
-            .collect();
-
-        let returns = math::to_log_returns(&prices);
-
-        observations.push(returns);
-    }
-    let mut correlations = HashMap::new();
-    for (a1, o1) in symbols.iter().zip(observations.iter()) {
-        for (a2, o2) in symbols.iter().zip(observations.iter()) {
-            //if a1 != a2 {
-            //    let reverse_key = (*a2, *a1);
-            //    if !correlations.contains_key(&reverse_key) {
-            println!("{a1} {a2}");
-            correlations.insert((*a1, *a2), math::pearson_correlation(o1, o2));
-            //    }
-            //}
-        }
-    }
-    Ok(correlations)
-}
-
-async fn export_pearson_correlations(symbols: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    let responses = get_pearson_correlations(symbols).await?;
-
-    let file = File::create("resources/correlations.txt")?;
-    let mut writer = BufWriter::new(file);
-    for ((ka, kb), v) in responses.iter() {
-        writeln!(writer, "{ka},{kb},{v}")?;
-    }
-    Ok(())
-}
-
-async fn get_pearson_correlations<'a>(
-    symbols: &'a [&str],
-) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
-    let mut observations: Vec<Vec<f64>> = Vec::new();
-
-    for s in symbols {
-        let values = get_klines(s).await?;
-
-        let prices: Vec<f64> = values
-            .iter()
-            .filter_map(|p| fs::parse::checked_string_to_f64(p[1].clone()))
-            .collect();
-
-        let returns = math::to_log_returns(&prices);
-
-        observations.push(returns);
-    }
-    let mut correlations = HashMap::new();
-    for (a1, o1) in symbols.iter().zip(observations.iter()) {
-        for (a2, o2) in symbols.iter().zip(observations.iter()) {
-            //if a1 != a2 {
-            //    let reverse_key = (*a2, *a1);
-            //    if !correlations.contains_key(&reverse_key) {
-            println!("{a1} {a2}");
-            correlations.insert((*a1, *a2), math::pearson_correlation(o1, o2));
-            //    }
-            //}
-        }
-    }
-    Ok(correlations)
-}
-
-async fn export_pearson_correlations(symbols: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    let responses = get_pearson_correlations(symbols).await?;
-
-    let file = File::create("resources/correlations.txt")?;
-    let mut writer = BufWriter::new(file);
-    for ((ka, kb), v) in responses.iter() {
-        writeln!(writer, "{ka},{kb},{v}")?;
-    }
-    Ok(())
-}
-
-async fn get_pearson_correlations<'a>(
-    symbols: &'a [&str],
-) -> Result<HashMap<(&'a str, &'a str), f64>, Box<dyn std::error::Error>> {
-    let mut observations: Vec<Vec<f64>> = Vec::new();
-
-    for s in symbols {
-        let values = get_klines(s).await?;
-
-        let prices: Vec<f64> = values
-            .iter()
-            .filter_map(|p| fs::parse::checked_string_to_f64(p[1].clone()))
-            .collect();
-
-        let returns = math::to_log_returns(&prices);
-
-        observations.push(returns);
-    }
-    let mut correlations = HashMap::new();
-    for (a1, o1) in symbols.iter().zip(observations.iter()) {
-        for (a2, o2) in symbols.iter().zip(observations.iter()) {
-            //if a1 != a2 {
-            //    let reverse_key = (*a2, *a1);
-            //    if !correlations.contains_key(&reverse_key) {
-            println!("{a1} {a2}");
-            correlations.insert((*a1, *a2), math::pearson_correlation(o1, o2));
-            //    }
-            //}
-        }
-    }
-    Ok(correlations)
-}
-
-async fn export_pearson_correlations(symbols: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    let responses = get_pearson_correlations(symbols).await?;
-
-    let file = File::create("resources/correlations.txt")?;
-    let mut writer = BufWriter::new(file);
-    for ((ka, kb), v) in responses.iter() {
-        writeln!(writer, "{ka},{kb},{v}")?;
-    }
-    Ok(())
-}
-
-*/

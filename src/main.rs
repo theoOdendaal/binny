@@ -5,11 +5,9 @@ mod math;
 mod models;
 
 use crate::errors::Error;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    path::Path,
-};
+use crate::fs::read::{identify_files, read_csv_from_zip_file};
+use crate::models::{FromDelimitedString, HistoricalKlineEvent};
+use std::path::Path;
 // Identify two (or more) assets that are historically correlated or cointegrated.
 // Ex. btcusdt and ethusdt.
 // When their price spread deviates significantly from the typical range,
@@ -22,19 +20,6 @@ use std::{
 // Test different liquidity horizons.
 // How much data should be used to compute z-score ?
 // Try other distributions ?
-
-fn read_klines(f: &str) -> Option<Vec<f64>> {
-    let file = File::open(f).ok()?;
-    let reader = BufReader::new(file);
-    let mut prices = Vec::new();
-    for line in reader.lines().map_while(Result::ok) {
-        let entries: Vec<&str> = line.split(",").collect();
-        if let Some(entry) = crate::fs::parse::checked_string_to_f64(entries[1].to_string()) {
-            prices.push(entry);
-        }
-    }
-    Some(prices)
-}
 
 /// Initialize required directories.
 fn init_dirs() -> Result<(), Error> {
@@ -52,22 +37,30 @@ fn init_dirs() -> Result<(), Error> {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     init_dirs()?;
-    // let file1 = "resources/BTCUSDT_klines.txt";
-    // let file2 = "resources/ETHUSDT_klines.txt";
 
-    // let data1 = read_klines(file1).unwrap();
-    // let data2 = read_klines(file2).unwrap();
-    //
-    // let residuals = math::compute_residuals(&data1, &data2).unwrap();
-    // for r in residuals {
-    //     println!("{r:?}");
-    // }
-
-    //let res = math::AugmentedDicketFuller::statistic(&residuals, 1);
-    //println!("{res:?}");
-
+    // Retrieve data.
     binance::historical::get_historical_data_range("monthly", "ETHUSDT", "1m").await?;
     binance::historical::get_historical_data_range("monthly", "BTCUSDT", "1m").await?;
+    binance::historical::get_historical_data_range("monthly", "DOGEBTC", "1m").await?;
+
+    let base_dir = "data/spot/monthly/klines/BTCUSDT/1m";
+    let file_collection = identify_files(base_dir)?;
+
+    let mut prices = Vec::new();
+    for file_dir in file_collection {
+        let content = read_csv_from_zip_file(file_dir.as_path()).await?;
+        for line in content.lines() {
+            let entries = HistoricalKlineEvent::from_delimited_string(&line, ',')?;
+            let time = entries.t;
+            let price = entries.c;
+            prices.push((time, price));
+        }
+    }
+    // println!("{:?}", &prices);
+
+    // let res = math::AugmentedDicketFuller::statistic(&residuals, 1);
+    // println!("{res:?}");
+
     /*
     let (tx1, rx1) = std::sync::mpsc::channel::<models::KlineEvent>();
     let (tx2, rx2) = std::sync::mpsc::channel::<models::KlineEvent>();
