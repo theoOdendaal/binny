@@ -12,6 +12,8 @@ static BASE_END_POINT: &str = "wss://stream.binance.com:9443";
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum KlineInterval {
+    #[serde(rename = "1s")]
+    OneSecond,
     #[serde(rename = "1m")]
     OneMinute,
     #[serde(rename = "3m")]
@@ -47,6 +49,7 @@ pub enum KlineInterval {
 impl std::fmt::Display for KlineInterval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
+            Self::OneSecond => "1s",
             Self::OneMinute => "1m",
             Self::ThreeMinutes => "3m",
             Self::FiveMinutes => "5m",
@@ -67,6 +70,12 @@ impl std::fmt::Display for KlineInterval {
     }
 }
 
+// TODO: make this more abstract in order to allow streams
+// other than Klines to be received.
+
+// TODO: make the below fn more modular because
+// the trim_matches() should not be in the below.
+
 pub fn stream_to_channel(
     symbol: &str,
     interval: &KlineInterval,
@@ -82,6 +91,8 @@ pub fn stream_to_channel(
 
         while let Ok(msg) = socket.read_message() {
             if let Message::Text(text) = msg {
+                println!("{:?}", text);
+                let text = text.trim_matches('"');
                 let parsed: models::KlineEvent = serde_json::from_str(&text)?;
                 if sender.send(parsed).is_err() {
                     break;

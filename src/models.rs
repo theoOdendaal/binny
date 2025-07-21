@@ -23,34 +23,34 @@ pub struct HistoricalKlineEvent {
 
 /// Deserialize klines received using binance websocket.
 #[allow(non_snake_case)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct KlineEvent {
     e: String, //Event type
     E: u64,    //Event time
     s: String, //Symbol
-    k: Kline,
+    pub k: Kline,
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Kline {
-    pub t: i64,    // Kline start time
-    pub T: i64,    // Kline close time
-    pub s: String, // Symbol
-    pub i: String, // Interval (e.g. "1m")
-    pub f: u64,    // First trade ID
-    pub L: u64,    // Last trade ID
-    pub o: String, // Open price
-    pub c: String, // Close price
-    pub h: String, // High price
-    pub l: String, // Low price
-    pub v: String, // Volume (base asset)
-    pub n: u64,    // Number of trades
-    pub x: bool,   // Is this kline closed?
-    pub q: String, // Quote asset volume
-    pub V: String, // Taker buy base asset volume
-    pub Q: String, // Taker buy quote asset volume
-    pub B: String, // Unused, can be ignored
+    t: i64,     // Kline start time
+    T: i64,     // Kline close time
+    s: String,  // Symbol
+    i: String,  // Interval (e.g. "1m")
+    f: i64,     // First trade ID
+    L: i64,     // Last trade ID
+    o: String,  // Open price
+    pub c: f64, // Close price
+    h: String,  // High price
+    l: String,  // Low price
+    v: String,  // Volume (base asset)
+    n: u64,     // Number of trades
+    x: bool,    // Is this kline closed?
+    q: String,  // Quote asset volume
+    V: String,  // Taker buy base asset volume
+    Q: String,  // Taker buy quote asset volume
+    B: String,  // Unused, can be ignored
 }
 
 /// Trait used to serialize string in the absence of field names
@@ -71,7 +71,7 @@ impl FromDelimitedString<&str> for HistoricalKlineEvent {
     where
         T::Err: std::fmt::Display,
     {
-        // TODO Update error handling?
+        // TODO:: Update error handling?
         fields
             .get(index)
             .ok_or(Error::Other(format!("Unable to retrieve index {}", index)))?
