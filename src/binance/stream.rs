@@ -91,7 +91,6 @@ pub fn stream_to_channel(
 
         while let Ok(msg) = socket.read_message() {
             if let Message::Text(text) = msg {
-                println!("{:?}", text);
                 let text = text.trim_matches('"');
                 let parsed: models::KlineEvent = serde_json::from_str(&text)?;
                 if sender.send(parsed).is_err() {

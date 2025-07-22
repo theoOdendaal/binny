@@ -1,2 +1,2 @@
 pub mod historical;
-pub mod websocket;
+pub mod stream;

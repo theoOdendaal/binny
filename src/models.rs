@@ -1,7 +1,6 @@
-use std::str::FromStr;
-
-use crate::errors::Error;
+use crate::{errors, fs::parse::string_to_f64};
 use serde::Deserialize;
+use std::str::FromStr;
 
 // Deserialize klines downloaded from data.binances.vision
 #[allow(non_snake_case)]
@@ -34,23 +33,24 @@ pub struct KlineEvent {
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize, Clone)]
 pub struct Kline {
-    t: i64,     // Kline start time
-    T: i64,     // Kline close time
-    s: String,  // Symbol
-    i: String,  // Interval (e.g. "1m")
-    f: i64,     // First trade ID
-    L: i64,     // Last trade ID
-    o: String,  // Open price
+    t: i64,    // Kline start time
+    T: i64,    // Kline close time
+    s: String, // Symbol
+    i: String, // Interval (e.g. "1m")
+    f: i64,    // First trade ID
+    L: i64,    // Last trade ID
+    o: String, // Open price
+    #[serde(deserialize_with = "string_to_f64")]
     pub c: f64, // Close price
-    h: String,  // High price
-    l: String,  // Low price
-    v: String,  // Volume (base asset)
-    n: u64,     // Number of trades
-    x: bool,    // Is this kline closed?
-    q: String,  // Quote asset volume
-    V: String,  // Taker buy base asset volume
-    Q: String,  // Taker buy quote asset volume
-    B: String,  // Unused, can be ignored
+    h: String, // High price
+    l: String, // Low price
+    v: String, // Volume (base asset)
+    n: u64,    // Number of trades
+    x: bool,   // Is this kline closed?
+    q: String, // Quote asset volume
+    V: String, // Taker buy base asset volume
+    Q: String, // Taker buy quote asset volume
+    B: String, // Unused, can be ignored
 }
 
 /// Trait used to serialize string in the absence of field names
@@ -59,30 +59,33 @@ pub trait FromDelimitedString<A>
 where
     Self: Sized,
 {
-    fn parse_field<T: FromStr>(fields: &[&str], index: usize) -> Result<T, Error>
+    fn parse_field<T: FromStr>(fields: &[&str], index: usize) -> Result<T, errors::Error>
     where
         T::Err: std::fmt::Display;
 
-    fn from_delimited_string(line: A, delimiter: char) -> Result<Self, Error>;
+    fn from_delimited_string(line: A, delimiter: char) -> Result<Self, errors::Error>;
 }
 
 impl FromDelimitedString<&str> for HistoricalKlineEvent {
-    fn parse_field<T: FromStr>(fields: &[&str], index: usize) -> Result<T, Error>
+    fn parse_field<T: FromStr>(fields: &[&str], index: usize) -> Result<T, errors::Error>
     where
         T::Err: std::fmt::Display,
     {
         // TODO:: Update error handling?
         fields
             .get(index)
-            .ok_or(Error::Other(format!("Unable to retrieve index {}", index)))?
+            .ok_or(errors::Error::Other(format!(
+                "Unable to retrieve index {}",
+                index
+            )))?
             .parse::<T>()
-            .map_err(|e| Error::Parse(format!("Failed to parse field {}: {}", index, e)))
+            .map_err(|e| errors::Error::Parse(format!("Failed to parse field {}: {}", index, e)))
     }
 
-    fn from_delimited_string(line: &str, delimiter: char) -> Result<Self, Error> {
+    fn from_delimited_string(line: &str, delimiter: char) -> Result<Self, errors::Error> {
         let splitted_line: Vec<&str> = line.split(delimiter).collect();
         if splitted_line.len() != 12 {
-            return Err(Error::Other(format!(
+            return Err(errors::Error::Other(format!(
                 "Length of line not equal to expected length"
             )));
         }

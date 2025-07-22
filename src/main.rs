@@ -5,7 +5,7 @@ mod math;
 mod models;
 mod strategy;
 
-use crate::binance::websocket::stream_to_channel;
+use crate::binance::stream::stream_to_channel;
 use crate::errors::Error;
 use crate::strategy::decision::{PositionAction, PositionDirection};
 use crate::strategy::simple::{SimpleAverage, SimpleStrategy};
@@ -49,23 +49,23 @@ async fn main() -> Result<(), Error> {
 
     let (tx1, rx1) = std::sync::mpsc::channel::<models::KlineEvent>();
     // let (tx2, rx2) = std::sync::mpsc::channel::<models::KlineEvent>();
-    let interval = binance::websocket::KlineInterval::OneSecond;
+    let interval = binance::stream::KlineInterval::OneSecond;
     let btc_handle = stream_to_channel("btcusdt", &interval, tx1);
     // let eth_handle = stream_to_channel("ethusdt", &interval, tx2);
 
     let handle1 = std::thread::spawn(move || {
         let mut position: Option<PositionDirection> = None;
         let mut strategy = SimpleAverage::default();
-        let mut proposed_decision: Option<PositionAction>;
+        let mut proposed_action: Option<PositionAction>;
 
         for trade in rx1 {
             // println!("[BTC] {trade:?}");
             strategy.update(&trade);
-            proposed_decision = strategy.trading_decision(position);
-            position = strategy.update_decision(position, proposed_decision);
+            proposed_action = strategy.get_position_action(position);
+            position = strategy.get_position_direction(position, proposed_action);
             println!(
                 "{:?}\t\t{:?}\t\t{:?}",
-                &proposed_decision, &position, &trade.k.c
+                &proposed_action, &position, &trade.k.c
             );
         }
     });

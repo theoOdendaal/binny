@@ -11,7 +11,7 @@ pub enum PositionAction {
 }
 
 pub trait TradingDecision {
-    fn trading_decision(
+    fn get_position_action(
         &self,
         current_position: Option<PositionDirection>,
     ) -> Option<PositionAction> {
@@ -38,7 +38,9 @@ pub trait TradingDecision {
     }
 
     // TODO: Refactor this function to make it more understandable.
-    fn update_decision(
+
+    /// Update a 'PositionDirection' using a 'PositionAction'.
+    fn get_position_direction(
         &self,
         current_position: Option<PositionDirection>,
         action: Option<PositionAction>,
