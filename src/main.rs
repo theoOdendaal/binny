@@ -7,9 +7,9 @@ mod strategy;
 
 use crate::binance::stream::stream_to_channel;
 use crate::errors::Error;
-use crate::strategy::decision::{PositionAction, PositionDirection};
-use crate::strategy::simple::{SimpleAverage, SimpleStrategy};
-use strategy::decision::TradingDecision;
+use crate::strategy::decision::PositionParameters;
+use crate::strategy::simple::SimpleAverage;
+use strategy::decision::{HandleStreamEvent, TradingStrategy};
 
 // Identify two (or more) assets that are historically correlated or cointegrated.
 // TODO: Ex. btcusdt and ethusdt.
@@ -48,38 +48,32 @@ async fn main() -> Result<(), Error> {
     // // println!("{:?}", &prices);
 
     let (tx1, rx1) = std::sync::mpsc::channel::<models::KlineEvent>();
-    // let (tx2, rx2) = std::sync::mpsc::channel::<models::KlineEvent>();
+
     let interval = binance::stream::KlineInterval::OneSecond;
     let btc_handle = stream_to_channel("btcusdt", &interval, tx1);
-    // let eth_handle = stream_to_channel("ethusdt", &interval, tx2);
 
-    let handle1 = std::thread::spawn(move || {
-        let mut position: Option<PositionDirection> = None;
+    let handle1 = std::thread::spawn(move || -> Result<(), Error> {
+        let mut position = PositionParameters::default();
         let mut strategy = SimpleAverage::default();
-        let mut proposed_action: Option<PositionAction>;
 
         for trade in rx1 {
-            // println!("[BTC] {trade:?}");
-            strategy.update(&trade);
-            proposed_action = strategy.get_position_action(position);
-            position = strategy.get_position_direction(position, proposed_action);
+            strategy.handle_stream_event(&trade)?;
+            position.set_action(strategy.determine_action(position.direction()));
+            position.set_direction(
+                strategy.determine_direction(position.direction(), position.action()),
+            );
+
             println!(
-                "{:?}\t\t{:?}\t\t{:?}",
-                &proposed_action, &position, &trade.k.c
+                "{:<15} {:<15} {:<15}",
+                format!("{:?}", &position.action()),
+                format!("{:?}", &position.direction()),
+                format!("{:?}", &trade.k.c)
             );
         }
+        Ok(())
     });
 
-    // let handle2 = std::thread::spawn(move || {
-    //     for trade in rx2 {
-    //         println!("[BTC] {trade:?}");
-    //     }
-    // });
-
-    // Wait for all threads
     btc_handle.join().unwrap()?;
-    // eth_handle.join().unwrap()?;
-    handle1.join().unwrap();
-    // handle2.join().unwrap();
+    handle1.join().unwrap()?;
     Ok(())
 }

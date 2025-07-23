@@ -1,3 +1,30 @@
+use crate::errors;
+
+/// Store current position parameters.
+#[derive(Debug, Default)]
+pub struct PositionParameters {
+    position_direction: Option<PositionDirection>,
+    position_action: Option<PositionAction>,
+}
+
+impl PositionParameters {
+    pub fn direction(&self) -> Option<PositionDirection> {
+        self.position_direction.to_owned()
+    }
+
+    pub fn action(&self) -> Option<PositionAction> {
+        self.position_action
+    }
+
+    pub fn set_direction(&mut self, direction: Option<PositionDirection>) {
+        self.position_direction = direction;
+    }
+
+    pub fn set_action(&mut self, action: Option<PositionAction>) {
+        self.position_action = action;
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PositionDirection {
     Long,
@@ -10,16 +37,27 @@ pub enum PositionAction {
     Sell,
 }
 
-pub trait TradingDecision {
-    fn get_position_action(
-        &self,
-        current_position: Option<PositionDirection>,
-    ) -> Option<PositionAction> {
-        let favourable_direction = self.evaluate_favourable_direction();
+/// Specifies how a stream event is handled by
+/// a trading strategy. Is most circumstances this
+/// translates to storing or ingesting the event,
+/// rather than application of trading logic.
+pub trait HandleStreamEvent<A> {
+    fn handle_stream_event(&mut self, event: A) -> Result<(), errors::Error>;
+}
+
+/// Trait used to designed a trading strategy.
+pub trait TradingStrategy {
+    /// Determines favourable position direction.
+    fn signal(&self) -> Option<PositionDirection>;
+
+    // Determines what action to take based on the current 'PositionDirection' and
+    // favourable position direction.
+    fn determine_action(&self, position: Option<PositionDirection>) -> Option<PositionAction> {
+        let signal = self.signal();
 
         // No action required if the current postion is
         // equal to the favourable direction.
-        if current_position == favourable_direction {
+        if position == signal {
             return None;
         }
 
@@ -28,8 +66,8 @@ pub trait TradingDecision {
         // be revisted, as the current position not longer have to be 'None'.
 
         // Only 'Buy' when current position is 'None'.
-        if let Some(direction) = favourable_direction {
-            if current_position == None {
+        if let Some(direction) = signal {
+            if position == None {
                 return Some(PositionAction::Buy(direction));
             }
         }
@@ -40,13 +78,13 @@ pub trait TradingDecision {
     // TODO: Refactor this function to make it more understandable.
 
     /// Update a 'PositionDirection' using a 'PositionAction'.
-    fn get_position_direction(
+    fn determine_direction(
         &self,
-        current_position: Option<PositionDirection>,
+        position: Option<PositionDirection>,
         action: Option<PositionAction>,
     ) -> Option<PositionDirection> {
-        match (current_position, action) {
-            (_, None) => current_position,
+        match (position, action) {
+            (_, None) => position,
             (None, Some(PositionAction::Buy(direction))) => Some(direction),
             (None, Some(PositionAction::Sell)) => {
                 panic!("Exiting a 'None' position should not be possible")
@@ -61,7 +99,4 @@ pub trait TradingDecision {
             (Some(PositionDirection::Short), Some(PositionAction::Sell)) => None,
         }
     }
-
-    /// Determines favourable position direction.
-    fn evaluate_favourable_direction(&self) -> Option<PositionDirection>;
 }

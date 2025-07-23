@@ -8,16 +8,8 @@ pub struct SimpleStrategy {
     previous_kline: Option<KlineEvent>,
 }
 
-impl SimpleStrategy {
-    // Allows stored prices to be stored.
-    pub fn update(&mut self, kline: &KlineEvent) {
-        self.previous_kline = self.current_kline.clone();
-        self.current_kline = Some(kline.to_owned());
-    }
-}
-
-impl super::decision::TradingDecision for SimpleStrategy {
-    fn evaluate_favourable_direction(&self) -> Option<super::decision::PositionDirection> {
+impl super::decision::TradingStrategy for SimpleStrategy {
+    fn signal(&self) -> Option<super::decision::PositionDirection> {
         if let (Some(current), Some(previous)) =
             (self.current_kline.clone(), self.previous_kline.clone())
         {
@@ -29,22 +21,21 @@ impl super::decision::TradingDecision for SimpleStrategy {
     }
 }
 
+impl super::decision::HandleStreamEvent<&KlineEvent> for SimpleStrategy {
+    fn handle_stream_event(&mut self, event: &KlineEvent) -> Result<(), crate::errors::Error> {
+        self.previous_kline = self.current_kline.clone();
+        self.current_kline = Some(event.to_owned());
+        Ok(())
+    }
+}
+
 #[derive(Default, Clone, Debug)]
 pub struct SimpleAverage {
     prices: VecDeque<KlineEvent>,
 }
 
-impl SimpleAverage {
-    pub fn update(&mut self, kline: &KlineEvent) {
-        if self.prices.len() == 10 {
-            self.prices.pop_front();
-        }
-        self.prices.push_back(kline.to_owned());
-    }
-}
-
-impl super::decision::TradingDecision for SimpleAverage {
-    fn evaluate_favourable_direction(&self) -> Option<super::decision::PositionDirection> {
+impl super::decision::TradingStrategy for SimpleAverage {
+    fn signal(&self) -> Option<super::decision::PositionDirection> {
         let mean = self.prices.iter().map(|a| a.k.c).sum::<f64>() / self.prices.len() as f64;
         if let Some(value) = self.prices.iter().last() {
             if value.k.c > mean {
@@ -52,5 +43,19 @@ impl super::decision::TradingDecision for SimpleAverage {
             }
         }
         None
+    }
+}
+
+pub fn testing123(test: &str) -> Result<String, ()> {
+    println!()
+}
+
+impl super::decision::HandleStreamEvent<&KlineEvent> for SimpleAverage {
+    fn handle_stream_event(&mut self, event: &KlineEvent) -> Result<(), crate::errors::Error> {
+        if self.prices.len() == 10 {
+            self.prices.pop_front();
+        }
+        self.prices.push_back(event.to_owned());
+        Ok(())
     }
 }
