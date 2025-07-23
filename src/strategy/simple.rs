@@ -46,13 +46,9 @@ impl super::decision::TradingStrategy for SimpleAverage {
     }
 }
 
-pub fn testing123(test: &str) -> Result<String, ()> {
-    println!()
-}
-
 impl super::decision::HandleStreamEvent<&KlineEvent> for SimpleAverage {
     fn handle_stream_event(&mut self, event: &KlineEvent) -> Result<(), crate::errors::Error> {
-        if self.prices.len() == 10 {
+        if self.prices.len() == 30 {
             self.prices.pop_front();
         }
         self.prices.push_back(event.to_owned());

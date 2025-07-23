@@ -2,9 +2,11 @@ use crate::{errors, fs::parse::string_to_f64};
 use serde::Deserialize;
 use std::str::FromStr;
 
+// TODO: Cleanup this module, as I've just been adding stuuf at random places.
+
 // Deserialize klines downloaded from data.binances.vision
 #[allow(non_snake_case)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct HistoricalKlineEvent {
     pub t: i64,    // Kline start time
     pub o: f64,    // Open price
@@ -18,6 +20,57 @@ pub struct HistoricalKlineEvent {
     pub V: f64,    // Taker buy base asset volume
     pub Q: f64,    // Taker buy quote asset volume
     pub B: String, // Unused, can be ignored
+}
+
+impl PartialEq for HistoricalKlineEvent {
+    fn eq(&self, other: &Self) -> bool {
+        self.t == other.t
+    }
+}
+
+impl Eq for HistoricalKlineEvent {}
+
+impl PartialOrd for HistoricalKlineEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.t.cmp(&other.t))
+    }
+}
+
+impl Ord for HistoricalKlineEvent {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.t.cmp(&other.t)
+    }
+}
+
+impl From<HistoricalKlineEvent> for KlineEvent {
+    fn from(value: HistoricalKlineEvent) -> Self {
+        let kline = Kline {
+            t: value.t,
+            T: value.T,
+            s: String::new(),
+            i: String::new(),
+            f: 0,
+            L: 0,
+            o: value.o.to_string(),
+            c: value.c,
+            h: value.h.to_string(),
+            l: value.l.to_string(),
+            v: value.v.to_string(),
+            n: value.n,
+            x: true,
+            q: value.q.to_string(),
+            V: value.V.to_string(),
+            Q: value.Q.to_string(),
+            B: value.B.to_string(),
+        };
+
+        Self {
+            e: String::new(),
+            E: 0,
+            s: String::new(),
+            k: kline,
+        }
+    }
 }
 
 /// Deserialize klines received using binance websocket.
@@ -74,10 +127,7 @@ impl FromDelimitedString<&str> for HistoricalKlineEvent {
         // TODO:: Update error handling?
         fields
             .get(index)
-            .ok_or(errors::Error::Other(format!(
-                "Unable to retrieve index {}",
-                index
-            )))?
+            .ok_or_else(|| errors::Error::Other(format!("Unable to retrieve index {}", index)))?
             .parse::<T>()
             .map_err(|e| errors::Error::Parse(format!("Failed to parse field {}: {}", index, e)))
     }
@@ -85,9 +135,7 @@ impl FromDelimitedString<&str> for HistoricalKlineEvent {
     fn from_delimited_string(line: &str, delimiter: char) -> Result<Self, errors::Error> {
         let splitted_line: Vec<&str> = line.split(delimiter).collect();
         if splitted_line.len() != 12 {
-            return Err(errors::Error::Other(format!(
-                "Length of line not equal to expected length"
-            )));
+            return Err(format!("Length of line not equal to expected length").into());
         }
         Ok(Self {
             t: Self::parse_field(&splitted_line, 0)?,

@@ -25,6 +25,18 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+impl From<String> for Error {
+    fn from(value: String) -> Self {
+        Error::Other(value)
+    }
+}
+
+impl From<&str> for Error {
+    fn from(value: &str) -> Self {
+        Error::Other(value.to_string())
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         Error::Io(value)

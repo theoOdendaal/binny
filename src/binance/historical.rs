@@ -1,72 +1,70 @@
-/// Retrieve historical data from the binance archives.
-use std::{fs::create_dir_all, path::Path};
-
-use crate::errors;
 use chrono::NaiveDate;
-use tokio::io::AsyncWriteExt;
+use std::path::Path;
+
+use crate::errors::Error;
+use crate::fs::write::async_write_safely;
 
 const BASE: &str = "https://data.binance.vision/data";
 
-async fn retrieve_file(
+fn get_remove_file_name(symbol: &str, interval: &str, date: &NaiveDate) -> String {
+    format!("{symbol}-{interval}-{}.zip", date.format("%Y-%m"))
+}
+
+fn get_remote_file_path(frequency: &str, symbol: &str, interval: &str) -> String {
+    format!("{BASE}/spot/{frequency}/klines/{symbol}/{interval}")
+}
+
+fn get_local_file_name(symbol: &str, interval: &str, date: &NaiveDate) -> String {
+    get_remove_file_name(symbol, interval, date)
+}
+
+fn get_local_file_path(frequency: &str, symbol: &str, interval: &str) -> String {
+    format!("data/spot/{frequency}/klines/{symbol}/{interval}")
+}
+
+fn is_saved(frequency: &str, symbol: &str, interval: &str, date: &NaiveDate) -> bool {
+    let local_file_path = get_local_file_path(frequency, symbol, interval);
+    let local_file_name = get_local_file_name(symbol, interval, date);
+    let local_full_path = Path::new(&local_file_path).join(&local_file_name);
+    local_full_path.exists() && local_full_path.is_file()
+}
+
+async fn retrieve_historical_data(
     client: &reqwest::Client,
-    writer: &mut tokio::fs::File,
-    url: &str,
-) -> Result<(), errors::Error> {
-    let response = client.get(url).send().await?;
-
-    if !response.status().is_success() {
-        return Err(errors::Error::Other(format!(
-            "Failed to download: {} (status {})",
-            url,
-            response.status()
-        )));
-    }
-
-    let bytes = response.bytes().await?;
-    writer.write_all(&bytes).await?;
-
-    Ok(())
-}
-
-fn create_binance_file_name(symbol: &str, frequency: &str, date: &NaiveDate) -> String {
-    format!("{symbol}-{frequency}-{}.zip", date.format("%Y-%m"))
-}
-
-pub async fn get_historical_data_range(
-    interval: &str,
-    symbol: &str,
     frequency: &str,
-) -> Result<(), errors::Error> {
-    let dir = format!("spot/{interval}/klines/{symbol}/{frequency}");
-    let base_url = format!("{BASE}/{dir}");
-    let start_date = chrono::NaiveDate::from_ymd_opt(2019, 7, 1).unwrap();
-    let end_date = chrono::NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
+    symbol: &str,
+    interval: &str,
+    date: &NaiveDate,
+) -> Result<Vec<u8>, Error> {
+    let path = get_remote_file_path(frequency, symbol, interval);
+    let file = get_remove_file_name(symbol, interval, date);
+    let url = format!("{}/{}", path, file);
+    let response = client.get(url).send().await?;
+    let text = response.bytes().await?.to_vec();
+    Ok(text)
+}
+
+pub async fn retrieve_and_save_historical_data_range<I>(
+    dates: I,
+    frequency: &str,
+    symbol: &str,
+    interval: &str,
+) -> Result<(), Error>
+where
+    I: IntoIterator<Item = NaiveDate>,
+{
     let client = reqwest::Client::new();
-
-    let mut date = start_date;
-    while date <= end_date {
-        let filename = create_binance_file_name(symbol, frequency, &date);
-        let url = format!("{base_url}/{filename}");
-
-        let path_dir = &format!("data/{dir}");
-        let path = Path::new(path_dir);
-        if !path.exists() {
-            create_dir_all(path)?;
+    for date in dates {
+        // Data is only downloaded if not yet available.
+        if !is_saved(frequency, symbol, interval, &date) {
+            let local_path = get_local_file_path(frequency, symbol, interval);
+            let local_file = get_local_file_name(symbol, interval, &date);
+            let path = Path::new(&local_path).join(&local_file);
+            let file =
+                retrieve_historical_data(&client, frequency, symbol, interval, &date).await?;
+            async_write_safely(path, &file).await?;
+            println!("{}", &local_file);
         }
-
-        // Only downloads new file if not yet available.
-        let file_dir = format!("{path_dir}/{filename}");
-        let file_path = Path::new(&file_dir);
-        if !file_path.exists() {
-            println!("Downloading: {url}");
-            let mut writer = tokio::fs::File::create(file_path).await?;
-            retrieve_file(&client, &mut writer, &url).await?;
-        } else {
-            println!("Already available: {url}");
-        }
-
-        date = date.checked_add_months(chrono::Months::new(1)).unwrap();
     }
-
     Ok(())
 }

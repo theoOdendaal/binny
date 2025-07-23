@@ -13,8 +13,8 @@ pub async fn read_csv_from_zip_file<P: AsRef<Path>>(path: P) -> Result<String, e
     let file = std::fs::File::open(zip_path)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
-    let mut content = String::new();
 
+    let mut content = String::new();
     if let Some(file_stem_osstr) = zip_path.file_stem() {
         if let Some(file_stem) = file_stem_osstr.to_str() {
             let filename = format!("{file_stem}.csv");
