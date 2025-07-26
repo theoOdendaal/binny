@@ -7,6 +7,8 @@ use url::Url;
 
 use crate::{errors, models};
 
+// TODO: There is a "Average Price" websocket, use this for the MACD?
+
 static BASE_END_POINT: &str = "wss://stream.binance.com:9443";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]

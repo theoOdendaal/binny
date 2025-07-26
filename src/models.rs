@@ -2,7 +2,20 @@ use crate::{errors, fs::parse::string_to_f64};
 use serde::Deserialize;
 use std::str::FromStr;
 
-// TODO: Cleanup this module, as I've just been adding stuuf at random places.
+// TODO: <symbol>@ticker
+// 24hr rolling window ticker statistics for a single symbol.
+// These are NOT the statistics of the UTC day, but a 24hr rolling window for the previous 24hrs.
+
+// TODO: <symbol>@ticker_<window_size>
+// Rolling window ticker statistics for a single symbol, computed over multiple windows.
+
+// TODO: <symbol>@avgPrice
+// Average price streams push changes in the average price over a fixed time interval.
+
+// TODO: <symbol>@depth OR <symbol>@depth@100ms
+// Order book price and quantity depth updates used to locally manage an order book.
+
+// TODO: How to manage a local order book correctly
 
 // Deserialize klines downloaded from data.binances.vision
 #[allow(non_snake_case)]
